@@ -1,0 +1,287 @@
+## שלב 1–3: Backend + PayPal + Discord (שלד עובד)
+
+⚠️ זה שלד לימודי אמיתי. לא לפרודקשן בלי אבטחה.
+
+---
+
+### 📁 מבנה תיקיות
+```
+fivem-shop/
+│─ server.js
+│─ package.json
+│─ .env
+│─ public/
+│   └─ index.html
+```
+
+---
+
+### 📦 package.json
+```json
+{
+  "name": "fivem-shop",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "paypal-rest-sdk": "^1.8.1",
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.3.1"
+  }
+}
+```
+
+---
+
+### 🔐 .env
+```env
+PAYPAL_CLIENT_ID=PASTE_HERE
+PAYPAL_CLIENT_SECRET=PASTE_HERE
+DISCORD_TOKEN=PASTE_HERE
+DISCORD_CHANNEL_ID=PASTE_HERE
+```
+
+---
+
+### 🧠 server.js (Backend)
+```js
+require('dotenv').config();
+const express = require('express');
+const paypal = require('paypal-rest-sdk');
+const { Client, GatewayIntentBits } = require('discord.js');
+
+const app = express();
+app.use(express.json());
+app.use(express.static('public'));
+
+// PayPal config
+paypal.configure({
+  mode: 'sandbox',
+  client_id: process.env.PAYPAL_CLIENT_ID,
+  client_secret: process.env.PAYPAL_CLIENT_SECRET
+});
+
+// Discord bot
+const discord = new Client({ intents: [GatewayIntentBits.Guilds] });
+discord.login(process.env.DISCORD_TOKEN);
+
+discord.once('ready', () => {
+  console.log('Discord bot online');
+});
+
+// Create payment
+app.post('/pay', (req, res) => {
+  const product = req.body.product;
+
+  const payment = {
+    intent: 'sale',
+    payer: { payment_method: 'paypal' },
+    redirect_urls: {
+      return_url: 'http://localhost:3000/success',
+      cancel_url: 'http://localhost:3000/cancel'
+    },
+    transactions: [{
+      item_list: {
+        items: [{
+          name: product,
+          sku: product,
+          price: '10.00',
+          currency: 'USD',
+          quantity: 1
+        }]
+      },
+      amount: { currency: 'USD', total: '10.00' },
+      description: 'FiveM Product'
+    }]
+  };
+
+  paypal.payment.create(payment, (err, payment) => {
+    if (err) return res.sendStatus(500);
+    const link = payment.links.find(l => l.rel === 'approval_url');
+    res.json({ url: link.href });
+  });
+});
+
+// Payment success
+app.get('/success', async (req, res) => {
+  const channel = await discord.channels.fetch(process.env.DISCORD_CHANNEL_ID);
+  channel.send('💰 בוצעה רכישה בחנות FiveM');
+  res.send('תשלום הצליח!');
+});
+
+app.listen(3000, () => console.log('Server running on 3000'));
+```
+
+---
+
+### 🖥️ public/index.html (Frontend)
+```html
+<!DOCTYPE html>
+<!DOCTYPE html>
+<html lang="he">
+<head>
+  <meta charset="UTF-8">
+  <title>FiveM Premium Shop</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: linear-gradient(135deg, #020617, #0f172a);
+      color: #e5e7eb;
+    }
+    header {
+      padding: 30px;
+      text-align: center;
+      font-size: 32px;
+      font-weight: bold;
+      background: rgba(2,6,23,0.8);
+      backdrop-filter: blur(6px);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+    }
+    .container {
+      max-width: 1200px;
+      margin: auto;
+      padding: 40px 20px;
+    }
+    .products {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 25px;
+    }
+    .card {
+      background: linear-gradient(180deg, #020617, #020617cc);
+      border-radius: 20px;
+      padding: 25px;
+      box-shadow: 0 0 40px rgba(0,0,0,0.7);
+      transition: transform 0.3s, box-shadow 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(120deg, transparent, rgba(37,99,235,0.15), transparent);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .card:hover::before {
+      opacity: 1;
+    }
+    .card:hover {
+      transform: translateY(-8px) scale(1.02);
+      box-shadow: 0 0 60px rgba(37,99,235,0.4);
+    }
+    .card h3 {
+      margin-top: 0;
+      font-size: 22px;
+      color: #93c5fd;
+    }
+    .card p {
+      font-size: 15px;
+      line-height: 1.6;
+    }
+    .price {
+      margin: 20px 0;
+      font-size: 22px;
+      font-weight: bold;
+      color: #22c55e;
+    }
+    button {
+      width: 100%;
+      padding: 14px;
+      border-radius: 12px;
+      border: none;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      color: white;
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      box-shadow: 0 0 25px rgba(37,99,235,0.6);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 45px rgba(37,99,235,0.9);
+    }
+    footer {
+      margin-top: 60px;
+      padding: 20px;
+      text-align: center;
+      font-size: 14px;
+      color: #9ca3af;
+    }
+  </style>
+</head>
+<body>
+
+<header>🔥 FiveM Premium Shop</header>
+
+<div class="container">
+  <div class="products">
+
+    <div class="card">
+      <h3>VIP Silver</h3>
+      <p>גישה לפקודות בסיסיות, תג VIP וצבע צ'אט מיוחד.</p>
+      <div class="price">₪25</div>
+      <button onclick="buy('VIP Silver')">קנה עכשיו</button>
+    </div>
+
+    <div class="card">
+      <h3>VIP Gold</h3>
+      <p>VIP מלא, כסף חודשי, רכבים מיוחדים ופקודות מתקדמות.</p>
+      <div class="price">₪50</div>
+      <button onclick="buy('VIP Gold')">קנה עכשיו</button>
+    </div>
+
+    <div class="card">
+      <h3>Starter Pack</h3>
+      <p>רכב התחלתי + 100,000$ + נשק בסיסי.</p>
+      <div class="price">₪30</div>
+      <button onclick="buy('Starter Pack')">קנה עכשיו</button>
+    </div>
+
+  </div>
+</div>
+
+<footer>
+  © FiveM Shop • תשלום מאובטח • חיבור אוטומטי לשרת
+</footer>
+
+<script>
+  async function buy(product) {
+    const res = await fetch('/pay', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product })
+    });
+    const data = await res.json();
+    window.location.href = data.url;
+  }
+</script>
+
+</body>
+</html>
+```
+
+---
+
+### ▶️ איך מריצים
+```
+npm install
+node server.js
+```
+פתח בדפדפן: http://localhost:3000
+
+---
+
+## השלב הבא:
+✔ חיבור ל-FiveM (מתן VIP אוטומטי)
+✔ אבטחה + DB
+✔ Webhook אמיתי של PayPal
+
+תגיד: **רוצה שלב 4 (FiveM אוטומטי)?**
